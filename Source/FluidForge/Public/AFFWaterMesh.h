@@ -9,6 +9,9 @@
 class UProceduralMeshComponent;
 class UTextureRenderTarget2D;
 
+/** Broadcast whenever a disturbance is added to the water surface. */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_ThreeParams(FOnWaveDisturbance, FVector, WorldLocation, float, Strength, int32, Radius);
+
 /**
  * AFFWaterMesh
  *
@@ -29,6 +32,26 @@ protected:
 
 public:
     virtual void Tick(float DeltaTime) override;
+
+    // ── Blueprint API ───────────────────────────────────────────────
+
+    /** Add a disturbance at grid coordinate (X, Y) with given strength and radius. */
+    UFUNCTION(BlueprintCallable, Category = "FluidForge")
+    void AddDisturbance(int32 X, int32 Y, float Strength, int32 Radius = 3);
+
+    /** Add a disturbance at a world-space location. Converts world XY to grid XY automatically. */
+    UFUNCTION(BlueprintCallable, Category = "FluidForge")
+    void AddDisturbanceAtWorldLocation(FVector WorldLocation, float Strength, int32 Radius = 3);
+
+    /** Get the absolute world-space Z height of the water surface at a world location. Uses bilinear interpolation for smooth results. */
+    UFUNCTION(BlueprintCallable, Category = "FluidForge")
+    float GetHeightAtWorldLocation(FVector WorldLocation) const;
+
+    /** Fires whenever a disturbance is added. Useful for triggering VFX or audio. */
+    UPROPERTY(BlueprintAssignable, Category = "FluidForge")
+    FOnWaveDisturbance OnWaveDisturbance;
+
+    // ── Configuration ───────────────────────────────────────────────
 
     // material
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FluidForge")

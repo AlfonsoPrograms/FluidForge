@@ -207,3 +207,73 @@ void AFFWaterMesh::UpdateMesh()
         VertexColors,
         Tangents);
 }
+
+// ── Blueprint API ───────────────────────────────────────────────────
+
+void AFFWaterMesh::AddDisturbance(int32 X, int32 Y, float Strength, int32 Radius)
+{
+    WaveGrid.AddDisturbance(X, Y, Strength, Radius);
+
+    // Calculate the world location of this grid cell and broadcast the event
+    FVector Origin = GetActorLocation();
+    FVector WorldLoc = Origin + FVector(X * CellSize, Y * CellSize, 0.0f);
+    OnWaveDisturbance.Broadcast(WorldLoc, Strength, Radius);
+}
+
+void AFFWaterMesh::AddDisturbanceAtWorldLocation(FVector WorldLocation, float Strength, int32 Radius)
+{
+    FVector Origin = GetActorLocation();
+    FVector LocalPos = WorldLocation - Origin;
+
+    // Convert world-space offset to grid coordinates
+    int32 GridX = FMath::RoundToInt32(LocalPos.X / CellSize);
+    int32 GridY = FMath::RoundToInt32(LocalPos.Y / CellSize);
+
+    // Clamp to valid grid range
+    GridX = FMath::Clamp(GridX, 0, GridWidth - 1);
+    GridY = FMath::Clamp(GridY, 0, GridHeight - 1);
+
+    WaveGrid.AddDisturbance(GridX, GridY, Strength, Radius);
+
+    OnWaveDisturbance.Broadcast(WorldLocation, Strength, Radius);
+}
+
+float AFFWaterMesh::GetHeightAtWorldLocation(FVector WorldLocation) const
+{
+    FVector Origin = GetActorLocation();
+    FVector LocalPos = WorldLocation - Origin;
+
+    // Continuous grid coordinates (floating-point)
+    float GridFX = LocalPos.X / CellSize;
+    float GridFY = LocalPos.Y / CellSize;
+
+    // Integer cell indices for the four surrounding cells
+    int32 X0 = FMath::FloorToInt32(GridFX);
+    int32 Y0 = FMath::FloorToInt32(GridFY);
+    int32 X1 = X0 + 1;
+    int32 Y1 = Y0 + 1;
+
+    // Clamp to valid grid range
+    X0 = FMath::Clamp(X0, 0, GridWidth - 1);
+    Y0 = FMath::Clamp(Y0, 0, GridHeight - 1);
+    X1 = FMath::Clamp(X1, 0, GridWidth - 1);
+    Y1 = FMath::Clamp(Y1, 0, GridHeight - 1);
+
+    // Fractional part for interpolation weights
+    float FracX = GridFX - FMath::FloorToFloat(GridFX);
+    float FracY = GridFY - FMath::FloorToFloat(GridFY);
+
+    // Sample the four corner heights
+    float H00 = WaveGrid.GetHeight(X0, Y0);
+    float H10 = WaveGrid.GetHeight(X1, Y0);
+    float H01 = WaveGrid.GetHeight(X0, Y1);
+    float H11 = WaveGrid.GetHeight(X1, Y1);
+
+    // Bilinear interpolation
+    float HBottom = FMath::Lerp(H00, H10, FracX);
+    float HTop = FMath::Lerp(H01, H11, FracX);
+    float InterpolatedHeight = FMath::Lerp(HBottom, HTop, FracY);
+
+    // Return absolute world Z: actor Z + scaled height
+    return Origin.Z + InterpolatedHeight * HeightScale;
+}
