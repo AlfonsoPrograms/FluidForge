@@ -41,6 +41,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FluidForge")
     float CellSize = 50.0f;
 
+    // Speed of wave propagation
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FluidForge")
+    float WaveSpeed = 1.0f;
+
     // Height scale for visual exaggeration
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FluidForge")
     float HeightScale = 50.0f;

@@ -15,7 +15,8 @@ void AFFWaterMesh::BeginPlay()
     Super::BeginPlay();
 
     WaveGrid.Initialize(GridWidth, GridHeight, CellSize);
-    WaveGrid.AddDisturbance(GridWidth / 2, GridHeight / 2, DisturbanceStrength);
+    WaveGrid.WaveSpeed = WaveSpeed;
+    WaveGrid.AddDisturbance(GridWidth / 2, GridHeight / 2, DisturbanceStrength, 3);
 
     BuildMesh();
 
@@ -31,12 +32,15 @@ void AFFWaterMesh::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
+    // Sync WaveSpeed dynamically
+    WaveGrid.WaveSpeed = WaveSpeed;
+
     WaveGrid.Tick(DeltaTime);
 
     TimeSinceDisturbance += DeltaTime;
     if (TimeSinceDisturbance >= 2.0f)
     {
-        WaveGrid.AddDisturbance(GridWidth / 2, GridHeight / 2, DisturbanceStrength);
+        WaveGrid.AddDisturbance(GridWidth / 2, GridHeight / 2, DisturbanceStrength, 3);
         TimeSinceDisturbance = 0.0f;
     }
 

@@ -37,6 +37,10 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FluidForge")
     float CellSize = 50.0f;
 
+    // Speed of wave propagation
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FluidForge")
+    float WaveSpeed = 1.0f;
+
     // Strength of disturbance added each tick for testing
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FluidForge")
     float DisturbanceStrength = 1.0f;

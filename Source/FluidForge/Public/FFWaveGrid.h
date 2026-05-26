@@ -21,16 +21,17 @@ public:
     // Step the simulation forward by DeltaTime seconds
     void Tick(float DeltaTime);
 
-    // Add a disturbance at grid coordinate (X, Y) with given strength
-    void AddDisturbance(int32 X, int32 Y, float Strength);
+    // Add a disturbance at grid coordinate (X, Y) with given strength and radius
+    void AddDisturbance(int32 X, int32 Y, float Strength, int32 Radius = 3);
 
     // Get water height at grid coordinate (X, Y)
     float GetHeight(int32 X, int32 Y) const;
 
-    // Grid dimensions
+    // Grid dimensions and config
     int32 Width;
     int32 Height;
     float CellSize;
+    float WaveSpeed;
 
 private:
     // Convert 2D coordinates to flat array index
@@ -46,8 +47,7 @@ private:
     TArray<float> HeightGrid;
 
     // Velocity per cell
-    TArray<float> VelocityX;
-    TArray<float> VelocityY;
+    TArray<float> Velocity;
 
     // Gravity constant
     static constexpr float Gravity = 9.8f;

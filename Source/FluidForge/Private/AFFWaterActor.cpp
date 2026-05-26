@@ -12,9 +12,10 @@ void AFFWaterActor::BeginPlay()
     Super::BeginPlay();
 
     WaveGrid.Initialize(GridWidth, GridHeight, CellSize);
+    WaveGrid.WaveSpeed = WaveSpeed;
 
-    // Add initial disturbance at center
-    WaveGrid.AddDisturbance(GridWidth / 2, GridHeight / 2, DisturbanceStrength);
+    // Add initial disturbance at center with radius 3
+    WaveGrid.AddDisturbance(GridWidth / 2, GridHeight / 2, DisturbanceStrength, 3);
 
     UE_LOG(LogFluidForge, Display, TEXT("AFFWaterActor started"));
 }
@@ -23,6 +24,9 @@ void AFFWaterActor::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
 
+    // Sync WaveSpeed dynamically
+    WaveGrid.WaveSpeed = WaveSpeed;
+
     // Step the simulation
     WaveGrid.Tick(DeltaTime);
 
@@ -30,7 +34,7 @@ void AFFWaterActor::Tick(float DeltaTime)
     TimeSinceDisturbance += DeltaTime;
     if (TimeSinceDisturbance >= 2.0f)
     {
-        WaveGrid.AddDisturbance(GridWidth / 2, GridHeight / 2, DisturbanceStrength);
+        WaveGrid.AddDisturbance(GridWidth / 2, GridHeight / 2, DisturbanceStrength, 3);
         TimeSinceDisturbance = 0.0f;
     }
 
