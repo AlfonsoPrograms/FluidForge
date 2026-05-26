@@ -27,6 +27,10 @@ public:
     // Get water height at grid coordinate (X, Y)
     float GetHeight(int32 X, int32 Y) const;
 
+    // Read-only access to raw arrays for GPU upload
+    const TArray<float> &GetHeightGrid() const { return HeightGrid; }
+    const TArray<float> &GetVelocityGrid() const { return Velocity; }
+
     // Grid dimensions and config
     int32 Width;
     int32 Height;
