@@ -32,47 +32,27 @@ void FFWaveGrid::Tick(float DeltaTime)
     if (Width == 0 || Height == 0)
         return;
 
-    float MaxHeight = 1.0f;
-    for (float H : HeightGrid)
-    {
-        MaxHeight = FMath::Max(MaxHeight, H);
-    }
+    float SafeDt = FMath::Min(DeltaTime, 0.016f);
 
-    float WaveSpeed = FMath::Sqrt(Gravity * MaxHeight);
-    float SafeDt = FMath::Min(DeltaTime, CellSize / WaveSpeed);
-
-    for (int32 Y = 0; Y < Height; Y++)
+    for (int32 Y = 1; Y < Height - 1; Y++)
     {
-        for (int32 X = 0; X < Width; X++)
+        for (int32 X = 1; X < Width - 1; X++)
         {
-            if (IsSolid(X, Y))
-                continue;
-
             float H = HeightGrid[Index(X, Y)];
-            float HRight = IsSolid(X + 1, Y) ? H : HeightGrid[Index(X + 1, Y)];
-            float HLeft = IsSolid(X - 1, Y) ? H : HeightGrid[Index(X - 1, Y)];
-            float HUp = IsSolid(X, Y + 1) ? H : HeightGrid[Index(X, Y + 1)];
-            float HDown = IsSolid(X, Y - 1) ? H : HeightGrid[Index(X, Y - 1)];
+            float HRight = HeightGrid[Index(X + 1, Y)];
+            float HLeft = HeightGrid[Index(X - 1, Y)];
+            float HUp = HeightGrid[Index(X, Y + 1)];
+            float HDown = HeightGrid[Index(X, Y - 1)];
 
-            VelocityX[Index(X, Y)] += (HLeft - HRight) * Gravity * SafeDt;
-            VelocityY[Index(X, Y)] += (HDown - HUp) * Gravity * SafeDt;
-        }
-    }
+            float Laplacian = HRight + HLeft + HUp + HDown - 4.0f * H;
 
-    for (int32 Y = 0; Y < Height; Y++)
-    {
-        for (int32 X = 0; X < Width; X++)
-        {
-            if (IsSolid(X, Y))
-                continue;
+            VelocityX[Index(X, Y)] += Laplacian * Gravity * SafeDt;
 
-            HeightGrid[Index(X, Y)] +=
-                (VelocityX[Index(X, Y)] + VelocityY[Index(X, Y)]) * SafeDt;
-
-            HeightGrid[Index(X, Y)] = FMath::Max(0.0f, HeightGrid[Index(X, Y)]);
+            HeightGrid[Index(X, Y)] += VelocityX[Index(X, Y)] * SafeDt;
 
             VelocityX[Index(X, Y)] *= Damping;
-            VelocityY[Index(X, Y)] *= Damping;
+
+            HeightGrid[Index(X, Y)] = FMath::Clamp(HeightGrid[Index(X, Y)], -5.0f, 5.0f);
         }
     }
 }

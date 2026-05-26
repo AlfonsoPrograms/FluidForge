@@ -13,6 +13,7 @@ public class FluidForge : ModuleRules
             "Engine",
             "RenderCore",
             "RHI",
+            "ProceduralMeshComponent",
         });
 
         PrivateDependencyModuleNames.AddRange(new string[]
