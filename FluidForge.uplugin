@@ -14,11 +14,17 @@
     "IsBetaVersion": true,
     "IsExperimentalVersion": false,
     "Installed": false,
+    "Plugins": [
+        {
+            "Name": "ProceduralMeshComponent",
+            "Enabled": true
+        }
+    ],
     "Modules": [
         {
             "Name": "FluidForge",
             "Type": "Runtime",
-            "LoadingPhase": "Default"
+            "LoadingPhase": "PostConfigInit"
         }
     ]
 }

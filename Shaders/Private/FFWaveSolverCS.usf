@@ -1,0 +1,72 @@
+// FluidForge — Wave Solver Compute Shader
+// FFWaveSolverCS.usf
+//
+// Runs one step of the wave equation per grid cell.
+// Each thread processes one cell.
+// Uses ping-pong: reads from PreviousHeight, writes to CurrentHeight.
+
+#include "/Engine/Public/Platform.ush"
+
+// Input — previous frame heightfield (read only)
+Texture2D<float> PreviousHeight;
+
+// Output — current frame heightfield (write)
+RWTexture2D<float> CurrentHeight;
+
+// Simulation parameters passed from CPU
+float DeltaTime;
+float Gravity;
+float Damping;
+float WaveSpeed;
+int GridWidth;
+int GridHeight;
+
+// Velocity buffer — read and write each frame
+RWTexture2D<float> Velocity;
+
+[numthreads(8, 8, 1)]
+void FFWaveSolverCS(uint3 ThreadId : SV_DispatchThreadID)
+{
+    int X = ThreadId.x;
+    int Y = ThreadId.y;
+
+    // Skip out of bounds threads
+    if (X >= GridWidth || Y >= GridHeight)
+        return;
+
+    // Skip border cells — they are handled as boundaries
+    if (X == 0 || Y == 0 || X == GridWidth - 1 || Y == GridHeight - 1)
+    {
+        CurrentHeight[int2(X, Y)] = PreviousHeight[int2(X, Y)];
+        return;
+    }
+
+    // Sample neighbors
+    float H      = PreviousHeight[int2(X,     Y    )];
+    float HRight = PreviousHeight[int2(X + 1, Y    )];
+    float HLeft  = PreviousHeight[int2(X - 1, Y    )];
+    float HUp    = PreviousHeight[int2(X,     Y + 1)];
+    float HDown  = PreviousHeight[int2(X,     Y - 1)];
+
+    // Laplacian — sum of neighbors minus 4x center
+    float Laplacian = HRight + HLeft + HUp + HDown - 4.0f * H;
+
+    // Read current velocity
+    float V = Velocity[int2(X, Y)];
+
+    // Update velocity from Laplacian
+    V += Laplacian * Gravity * WaveSpeed * DeltaTime;
+
+    // Apply velocity to height
+    float NewH = H + V * DeltaTime;
+
+    // Damp velocity
+    V *= Damping;
+
+    // Clamp height for stability
+    NewH = clamp(NewH, -5.0f, 5.0f);
+
+    // Write results
+    CurrentHeight[int2(X, Y)] = NewH;
+    Velocity[int2(X, Y)] = V;
+}
