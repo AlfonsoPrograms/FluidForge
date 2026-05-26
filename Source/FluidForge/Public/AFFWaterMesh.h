@@ -6,6 +6,9 @@
 #include "ProceduralMeshComponent.h"
 #include "AFFWaterMesh.generated.h"
 
+class UProceduralMeshComponent;
+class UTextureRenderTarget2D;
+
 /**
  * AFFWaterMesh
  *
@@ -52,6 +55,10 @@ public:
     // Disturbance strength
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FluidForge")
     float DisturbanceStrength = 0.5f;
+
+    // The render target that stores the heightfield data for Materials
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidForge")
+    UTextureRenderTarget2D *HeightfieldRT = nullptr;
 
 private:
     // The simulation grid
