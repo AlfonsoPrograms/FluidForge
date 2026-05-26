@@ -7,7 +7,21 @@
 #include "RenderingThread.h"
 #include "TextureResource.h"
 #include "RHI.h"
+#include "RHIResources.h"
+#include "RHICommandList.h"
 #include "Materials/MaterialInstanceDynamic.h"
+
+// Private GPU resource container
+// Private GPU resource container — global to avoid UHT conflicts
+struct FFGPUResources
+{
+    TRefCountPtr<FRHITexture> HeightBuffers[2];
+    TRefCountPtr<FRHITexture> VelocityBuffer;
+    int32 CurrentBufferIndex = 0;
+};
+
+// Helper macro for clean casting
+#define GET_GPU_RESOURCES() static_cast<FFGPUResources *>(GPUResources)
 
 AFFWaterMesh::AFFWaterMesh()
 {
@@ -15,6 +29,64 @@ AFFWaterMesh::AFFWaterMesh()
 
     WaterMesh = CreateDefaultSubobject<UProceduralMeshComponent>(TEXT("WaterMesh"));
     RootComponent = WaterMesh;
+}
+
+void AFFWaterMesh::InitGPUResources()
+{
+    if (bGPUResourcesInitialized)
+        return;
+
+    GPUResources = new FFGPUResources();
+
+    int32 W = GridWidth;
+    int32 H = GridHeight;
+    FFGPUResources *Resources = GET_GPU_RESOURCES();
+
+    ENQUEUE_RENDER_COMMAND(InitFluidForgeGPUResources)(
+        [Resources, W, H](FRHICommandListImmediate &RHICmdList)
+        {
+            FRHITextureCreateDesc Desc =
+                FRHITextureCreateDesc::Create2D(
+                    TEXT("FF_HeightBuffer_A"),
+                    W, H,
+                    PF_R32_FLOAT)
+                    .SetFlags(ETextureCreateFlags::UAV |
+                              ETextureCreateFlags::ShaderResource);
+
+            Resources->HeightBuffers[0] = RHICreateTexture(Desc);
+
+            Desc.SetDebugName(TEXT("FF_HeightBuffer_B"));
+            Resources->HeightBuffers[1] = RHICreateTexture(Desc);
+
+            Desc.SetDebugName(TEXT("FF_VelocityBuffer"));
+            Resources->VelocityBuffer = RHICreateTexture(Desc);
+        });
+
+    FlushRenderingCommands();
+
+    bGPUResourcesInitialized = true;
+    UE_LOG(LogFluidForge, Display, TEXT("FluidForge GPU resources initialized: %dx%d"), GridWidth, GridHeight);
+}
+
+void AFFWaterMesh::ReleaseGPUResources()
+{
+    if (!bGPUResourcesInitialized || !GPUResources)
+        return;
+
+    FFGPUResources *Resources = GET_GPU_RESOURCES();
+
+    ENQUEUE_RENDER_COMMAND(ReleaseFluidForgeGPUResources)(
+        [Resources](FRHICommandListImmediate &RHICmdList)
+        {
+            Resources->HeightBuffers[0].SafeRelease();
+            Resources->HeightBuffers[1].SafeRelease();
+            Resources->VelocityBuffer.SafeRelease();
+            delete Resources;
+        });
+
+    GPUResources = nullptr;
+    bGPUResourcesInitialized = false;
+    UE_LOG(LogFluidForge, Display, TEXT("FluidForge GPU resources released"));
 }
 
 void AFFWaterMesh::BeginPlay()
@@ -25,7 +97,13 @@ void AFFWaterMesh::BeginPlay()
     WaveGrid.WaveSpeed = WaveSpeed;
     WaveGrid.AddDisturbance(GridWidth / 2, GridHeight / 2, DisturbanceStrength, 3);
 
-    // Create the render target dynamically matching the grid dimensions in single-channel 16-bit float format
+    // Initialize GPU resources if GPU solver is enabled
+    if (bUseGPUSolver)
+    {
+        InitGPUResources();
+    }
+
+    // Create render target for material heightfield sampling
     HeightfieldRT = UKismetRenderingLibrary::CreateRenderTarget2D(
         this,
         GridWidth,
@@ -34,7 +112,7 @@ void AFFWaterMesh::BeginPlay()
 
     if (HeightfieldRT)
     {
-        UE_LOG(LogFluidForge, Display, TEXT("HeightfieldRT successfully created: %dx%d"), GridWidth, GridHeight);
+        UE_LOG(LogFluidForge, Display, TEXT("HeightfieldRT created: %dx%d"), GridWidth, GridHeight);
     }
     else
     {
@@ -50,7 +128,7 @@ void AFFWaterMesh::BeginPlay()
         {
             DynMaterial->SetTextureParameterValue(FName("HeightfieldTexture"), HeightfieldRT);
             WaterMesh->SetMaterial(0, DynMaterial);
-            UE_LOG(LogFluidForge, Display, TEXT("Created dynamic material instance and bound HeightfieldRT to 'HeightfieldTexture'"));
+            UE_LOG(LogFluidForge, Display, TEXT("Bound HeightfieldRT to material"));
         }
         else
         {
@@ -58,7 +136,17 @@ void AFFWaterMesh::BeginPlay()
         }
     }
 
-    UE_LOG(LogFluidForge, Display, TEXT("AFFWaterMesh started"));
+    // Initialize readback cache
+    GPUReadbackCache.Init(0.0f, GridWidth * GridHeight);
+
+    UE_LOG(LogFluidForge, Display, TEXT("AFFWaterMesh started — GPU solver: %s"),
+           bUseGPUSolver ? TEXT("ON") : TEXT("OFF"));
+}
+
+void AFFWaterMesh::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    Super::EndPlay(EndPlayReason);
+    ReleaseGPUResources();
 }
 
 void AFFWaterMesh::Tick(float DeltaTime)

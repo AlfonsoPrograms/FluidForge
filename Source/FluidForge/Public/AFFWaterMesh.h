@@ -4,6 +4,10 @@
 #include "GameFramework/Actor.h"
 #include "FFWaveGrid.h"
 #include "ProceduralMeshComponent.h"
+#include "RHI.h"
+#include "RHIResources.h"
+#include "RHICommandList.h"
+#include "RenderingThread.h"
 #include "AFFWaterMesh.generated.h"
 
 class UProceduralMeshComponent;
@@ -26,6 +30,7 @@ class FLUIDFORGE_API AFFWaterMesh : public AActor
 
 public:
     AFFWaterMesh();
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 protected:
     virtual void BeginPlay() override;
@@ -83,6 +88,9 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "FluidForge")
     UTextureRenderTarget2D *HeightfieldRT = nullptr;
 
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FluidForge | GPU")
+    bool bUseGPUSolver = false;
+
 private:
     // The simulation grid
     FFWaveGrid WaveGrid;
@@ -106,4 +114,19 @@ private:
     TArray<FProcMeshTangent> Tangents;
 
     float TimeSinceDisturbance = 0.0f;
+
+    // ── GPU Solver ──────────────────────────────────────────────────
+
+    // CPU readback cache — one frame latency on GPU path
+    TArray<float> GPUReadbackCache;
+    bool bGPUResourcesInitialized = false;
+
+    // Initialize GPU textures
+    void InitGPUResources();
+
+    // Release GPU textures
+    void ReleaseGPUResources();
+
+    // Opaque pointer to GPU resources — defined in .cpp
+    void *GPUResources = nullptr;
 };
