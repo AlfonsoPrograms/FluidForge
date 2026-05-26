@@ -20,7 +20,7 @@ Inspired by the beauty of emergent complexity — the same simple physics rules 
 
 ## Status
 
-🚧 **Early Development — v0.1.0**
+🚧 **Early Development — v0.4.0**
 
 FluidForge is in its earliest stage. The foundation is being laid.
 Contributors and testers are welcome at every stage of the journey.
@@ -29,10 +29,10 @@ Contributors and testers are welcome at every stage of the journey.
 
 ## Roadmap
 
-- [ ] CPU-side SWE wave propagator
-- [ ] Render target heightfield output
-- [ ] Basic water material
-- [ ] Blueprint API
+- [x] CPU-side SWE wave propagator
+- [x] Render target heightfield output
+- [x] Basic water material
+- [x] Blueprint API
 - [ ] Editor viewport live simulation toggle
 - [ ] GPU compute shader port
 - [ ] Physics / buoyancy coupling
