@@ -1,0 +1,24 @@
+{
+    "FileVersion": 3,
+    "Version": 1,
+    "VersionName": "0.1.0",
+    "FriendlyName": "FluidForge",
+    "Description": "Free, open source GPU-accelerated water simulation plugin for Unreal Engine 5",
+    "Category": "Simulation",
+    "CreatedBy": "AlfonsoPrograms",
+    "CreatedByURL": "https://github.com/AlfonsoPrograms",
+    "DocsURL": "",
+    "MarketplaceURL": "",
+    "SupportURL": "",
+    "CanContainContent": true,
+    "IsBetaVersion": true,
+    "IsExperimentalVersion": false,
+    "Installed": false,
+    "Modules": [
+        {
+            "Name": "FluidForge",
+            "Type": "Runtime",
+            "LoadingPhase": "Default"
+        }
+    ]
+}
