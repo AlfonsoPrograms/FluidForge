@@ -34,7 +34,7 @@ Contributors and testers are welcome at every stage of the journey.
 - [x] Basic water material
 - [x] Blueprint API
 - [ ] Editor viewport live simulation toggle
-- [ ] GPU compute shader port
+- [x] GPU compute shader port
 - [ ] Physics / buoyancy coupling
 - [ ] Niagara VFX integration
 - [ ] UE Water Plugin integration
