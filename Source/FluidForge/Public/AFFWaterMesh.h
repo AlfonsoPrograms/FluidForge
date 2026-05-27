@@ -126,7 +126,14 @@ private:
 
     // Release GPU textures
     void ReleaseGPUResources();
+    // Dispatch compute shader for one sim step
+    void DispatchGPUSolver(float DeltaTime);
 
     // Opaque pointer to GPU resources — defined in .cpp
     void *GPUResources = nullptr;
+
+    int32 PendingGPUDisturbanceX = -1;
+    int32 PendingGPUDisturbanceY = -1;
+    float PendingGPUDisturbanceStrength = 0.0f;
+    int32 PendingGPUDisturbanceRadius = 0;
 };
