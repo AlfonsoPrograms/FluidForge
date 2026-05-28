@@ -38,6 +38,19 @@ protected:
 public:
     virtual void Tick(float DeltaTime) override;
 
+    virtual void OnConstruction(const FTransform &Transform) override;
+
+    // Tells Unreal it's allowed to tick this actor in the editor viewport
+    virtual bool ShouldTickIfViewportsOnly() const override;
+
+    // Crucial for editor cleanup
+    virtual void Destroyed() override;
+
+    // ── Configuration ───────────────────────────────────────────────
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FluidForge | Editor")
+    bool bLiveSimulationInEditor = false;
+
     // ── Blueprint API ───────────────────────────────────────────────
 
     /** Add a disturbance at grid coordinate (X, Y) with given strength and radius. */
@@ -91,7 +104,12 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "FluidForge | GPU")
     bool bUseGPUSolver = false;
 
+#if WITH_EDITOR
+    virtual void PostEditChangeProperty(FPropertyChangedEvent &PropertyChangedEvent) override;
+#endif
+
 private:
+    bool bEditorInitialized = false;
     // The simulation grid
     FFWaveGrid WaveGrid;
 

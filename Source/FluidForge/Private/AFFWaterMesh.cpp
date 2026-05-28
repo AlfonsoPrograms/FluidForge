@@ -259,86 +259,178 @@ void AFFWaterMesh::EndPlay(const EEndPlayReason::Type EndPlayReason)
     ReleaseGPUResources();
 }
 
+void AFFWaterMesh::OnConstruction(const FTransform &Transform)
+{
+    Super::OnConstruction(Transform);
+
+    // Rebuild the flat visual mesh geometry immediately in the editor
+    BuildMesh();
+
+    // Ensure the Render Target matches the current grid size if edited
+    if (!HeightfieldRT || HeightfieldRT->SizeX != GridWidth || HeightfieldRT->SizeY != GridHeight)
+    {
+        HeightfieldRT = UKismetRenderingLibrary::CreateRenderTarget2D(this, GridWidth, GridHeight, RTF_R32f);
+
+        if (WaterMaterial && WaterMesh)
+        {
+            UMaterialInstanceDynamic *DynMaterial = Cast<UMaterialInstanceDynamic>(WaterMesh->GetMaterial(0));
+            if (!DynMaterial || DynMaterial->Parent != WaterMaterial)
+            {
+                DynMaterial = UMaterialInstanceDynamic::Create(WaterMaterial, this);
+                WaterMesh->SetMaterial(0, DynMaterial);
+            }
+            if (DynMaterial && HeightfieldRT)
+            {
+                DynMaterial->SetTextureParameterValue(FName("HeightfieldTexture"), HeightfieldRT);
+            }
+        }
+    }
+}
+
+bool AFFWaterMesh::ShouldTickIfViewportsOnly() const
+{
+    return bLiveSimulationInEditor;
+}
+
+void AFFWaterMesh::Destroyed()
+{
+    Super::Destroyed();
+    // Prevent GPU memory leaks when deleting the actor from the level editor
+    ReleaseGPUResources();
+}
+
+#if WITH_EDITOR
+void AFFWaterMesh::PostEditChangeProperty(FPropertyChangedEvent &PropertyChangedEvent)
+{
+    Super::PostEditChangeProperty(PropertyChangedEvent);
+
+    FName PropertyName = (PropertyChangedEvent.Property != nullptr) ? PropertyChangedEvent.Property->GetFName() : NAME_None;
+
+    // If critical simulation parameters change, flush and force re-initialization
+    if (PropertyName == GET_MEMBER_NAME_CHECKED(AFFWaterMesh, GridWidth) ||
+        PropertyName == GET_MEMBER_NAME_CHECKED(AFFWaterMesh, GridHeight) ||
+        PropertyName == GET_MEMBER_NAME_CHECKED(AFFWaterMesh, bUseGPUSolver))
+    {
+        ReleaseGPUResources();
+        bEditorInitialized = false;
+    }
+}
+#endif
+
 void AFFWaterMesh::Tick(float DeltaTime)
 {
     Super::Tick(DeltaTime);
+
+    // Sync WaveSpeed dynamically from the actor's properties
     WaveGrid.WaveSpeed = WaveSpeed;
 
-    // Handle the 2-second periodic timer
-    TimeSinceDisturbance += DeltaTime;
-    bool bTriggerDisturbance = false;
-    if (TimeSinceDisturbance >= 2.0f)
+    // ── 1. EDITOR-SPECIFIC SIMULATION INITIALIZATION ─────────────────
+    // If we are looking at this actor in the editor viewport (not in a running game)
+    // we need to manually trigger setup because BeginPlay never fires.
+    if (!GetWorld()->IsGameWorld())
     {
-        bTriggerDisturbance = true;
-        TimeSinceDisturbance = 0.0f;
+        if (!bEditorInitialized)
+        {
+            // Set up the internal CPU data structures
+            WaveGrid.Initialize(GridWidth, GridHeight, CellSize);
+            WaveGrid.WaveSpeed = WaveSpeed;
+
+            // Set up GPU textures and resources if the compute shader is enabled
+            if (bUseGPUSolver)
+            {
+                InitGPUResources();
+            }
+
+            // Rebuild visual vertex structures
+            BuildMesh();
+
+            // Give the water a starting splash right at the center to show it works
+            if (bUseGPUSolver)
+            {
+                PendingGPUDisturbanceX = GridWidth / 2;
+                PendingGPUDisturbanceY = GridHeight / 2;
+                PendingGPUDisturbanceStrength = DisturbanceStrength;
+                PendingGPUDisturbanceRadius = 3;
+            }
+            else
+            {
+                WaveGrid.AddDisturbance(GridWidth / 2, GridHeight / 2, DisturbanceStrength, 3);
+            }
+
+            bEditorInitialized = true;
+        }
     }
 
-    // Completely separate the CPU and GPU branches
-    if (bUseGPUSolver && bGPUResourcesInitialized)
+    // ── 2. PERIODIC SPLASH GENERATION ────────────────────────────────
+    // Keeps the simulation moving by dropping a splash in the center every 2 seconds
+    TimeSinceDisturbance += DeltaTime;
+    if (TimeSinceDisturbance >= 2.0f)
     {
-        if (bTriggerDisturbance)
+        if (bUseGPUSolver)
         {
             PendingGPUDisturbanceX = GridWidth / 2;
             PendingGPUDisturbanceY = GridHeight / 2;
             PendingGPUDisturbanceStrength = DisturbanceStrength;
             PendingGPUDisturbanceRadius = 3;
         }
-
-        // Compute shader runs and copies directly into the HeightfieldRT texture
-        DispatchGPUSolver(DeltaTime);
-
-        // Skip CPU texture copy loops and manual vertex updates.
-        // In GPU mode, Material WPO handles visual displacement!
-    }
-    else
-    {
-        if (bTriggerDisturbance)
+        else
         {
             WaveGrid.AddDisturbance(GridWidth / 2, GridHeight / 2, DisturbanceStrength, 3);
         }
 
+        TimeSinceDisturbance = 0.0f;
+    }
+
+    // ── 3. DISPATCH ENGINE AND UPDATE SIMULATION ─────────────────────
+    if (bUseGPUSolver)
+    {
+        // Step the simulation using the compute shader path (RDG)
+        DispatchGPUSolver(DeltaTime);
+
+        // Update the CPU vertex arrays from the GPU readback buffer
+        // to deform the Procedural Mesh geometry
+        UpdateMesh();
+    }
+    else
+    {
+        // Step the simulation using the CPU Shallow Water Equations loop
         WaveGrid.Tick(DeltaTime);
 
-        // Fallback CPU-to-RenderTarget render pass
-        if (HeightfieldRT && GridWidth > 0 && GridHeight > 0)
+        // Update vertices directly from CPU memory
+        UpdateMesh();
+
+        // ── 4. RENDER TARGET SYNC (CPU ONLY) ──────────────────────────
+        // When using the CPU solver, we must manually copy the float values
+        // over to the Render Target so the Basic Water Material can read it.
+        // (The GPU path writes to the textures directly during dispatch)
+        if (HeightfieldRT)
         {
+            // Format and pack the CPU height values into a texture update payload
             FTextureRenderTargetResource *RTResource = HeightfieldRT->GameThread_GetRenderTargetResource();
             if (RTResource)
             {
-                TArray<FFloat16> HeightData;
-                HeightData.SetNumUninitialized(GridWidth * GridHeight);
+                TArray<FFloat16> Float16Data;
+                Float16Data.SetNumUninitialized(GridWidth * GridHeight);
 
-                for (int32 Y = 0; Y < GridHeight; Y++)
+                const TArray<float> &Heights = WaveGrid.GetHeightGrid();
+                for (int32 i = 0; i < Heights.Num(); ++i)
                 {
-                    for (int32 X = 0; X < GridWidth; X++)
-                    {
-                        float HeightVal = WaveGrid.GetHeight(X, Y);
-                        HeightData[Y * GridWidth + X] = FFloat16(HeightVal);
-                    }
+                    Float16Data[i] = FFloat16(Heights[i]);
                 }
 
-                TArray<FFloat16> *DataCopy = new TArray<FFloat16>(MoveTemp(HeightData));
-                int32 Width = GridWidth;
-                int32 Height = GridHeight;
-
-                ENQUEUE_RENDER_COMMAND(UpdateFluidForgeRTCommand)(
-                    [RTResource, DataCopy, Width, Height](FRHICommandListImmediate &RHICmdList)
+                ENQUEUE_RENDER_COMMAND(UpdateWaterMeshRT)(
+                    [RTResource, Float16Data, Width = GridWidth, Height = GridHeight](FRHICommandListImmediate &RHICmdList)
                     {
-                        auto RhiTexture = RTResource->GetTexture2DRHI();
-                        if (RhiTexture)
-                        {
-                            FUpdateTextureRegion2D Region(0, 0, 0, 0, Width, Height);
-                            uint32 DestStride = Width * sizeof(FFloat16);
-                            RHICmdList.UpdateTexture2D(
-                                RhiTexture, 0, Region, DestStride,
-                                reinterpret_cast<const uint8 *>(DataCopy->GetData()));
-                        }
-                        delete DataCopy;
+                        FUpdateTextureRegion2D Region(0, 0, 0, 0, Width, Height);
+                        RHIUpdateTexture2D(
+                            RTResource->GetRenderTargetTexture(),
+                            0,
+                            Region,
+                            Width * sizeof(FFloat16),
+                            reinterpret_cast<const uint8 *>(Float16Data.GetData()));
                     });
             }
         }
-
-        UpdateMesh();
     }
 }
 
